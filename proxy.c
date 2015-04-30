@@ -63,10 +63,11 @@ char* parse_host(char* buf, int* port)
 			/* Extract the port number */
 			*port = 80; /* default */
 			char* hostend = strpbrk(tok, " :/\r\n\0");
-			if (*hostend == ':')
+			if (hostend != NULL && *hostend == ':')
+			{
 				*port = atoi(hostend + 1);
-
-			*hostend = '\0';
+				*hostend = '\0';
+			}
 			return tok;
 		}
 		tok = strtok_r(NULL, " \r\n", &saveptr);
@@ -143,23 +144,25 @@ void* do_proxy(void* thr_param)
 	}
 
 	/* Read server response */
-	char buffer[BUFSIZE];
-	bzero(buffer, BUFSIZE);
 	int flag = 1;
 	printf("***reading server response\n");
 	printf(">>>\n");
-	while( (n = read(sockfd_server, buffer, BUFSIZE) > 0))
+	while(1)
 	{
+		char buffer[BUFSIZE] = {0,};
+		int nread = read(sockfd_server, buffer, BUFSIZE);
+		if(nread <= 0) break;
+		
 		if(flag)
 		{
 			printf("%s", buffer);
-			flag = 0;
+			flag = 1;
 		}
 		else 
 		{
 			printf(".");
 		}
-		int i = write(sockfd_client, buffer, strlen(buffer));
+		int i = write(sockfd_client, buffer, nread);
 	}
 	close(sockfd_server);
 	close(sockfd_client);
