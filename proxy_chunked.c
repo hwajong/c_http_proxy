@@ -242,6 +242,8 @@ void* do_proxy(void* thr_param)
 					nheader_data = size_front + size_rear;
 					memcpy(header_data, header_cp, nheader_data);
 
+					free(header_cp);
+
 					printf("***Remove Transfer-Encoding: chunked Field...ok\n");
 //					printf("%s\n\n\n\n", header_data);
 				}
@@ -398,6 +400,9 @@ void* do_proxy(void* thr_param)
 //	printf("***** nbody_data : %d\n", nbody_data);
 	write(sockfd_client, header_data, nheader_data);
 	write(sockfd_client, body_data, nbody_data);
+
+	free(header_data);
+	free(body_data);
 
 	close(sockfd_server);
 	close(sockfd_client);
