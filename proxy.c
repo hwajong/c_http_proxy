@@ -98,7 +98,8 @@ void* do_proxy(void* thr_param)
 	if(host_name == NULL)
 	{
 		fprintf(stderr, "***No host field\n");
-		exit(1);
+		close(sockfd_client);
+		return NULL;
 	}
 	printf("***Host name : %s\n", host_name);
 	printf("***Port : %d\n", port);
@@ -110,7 +111,8 @@ void* do_proxy(void* thr_param)
 	{
 		fflush(stdout);
 		fprintf(stderr, "\n***No such host : %s\n", host_name);
-		exit(1);
+		close(sockfd_client);
+		return NULL;
 	}
 	printf("ok\n");
 
@@ -130,7 +132,8 @@ void* do_proxy(void* thr_param)
 	if(connect(sockfd_server, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0)
 	{
 		perror("***Error in connecting to server\n");
-		exit(1);
+		close(sockfd_client);
+		return NULL;
 	}
 	
 	printf("ok\n");
@@ -140,7 +143,8 @@ void* do_proxy(void* thr_param)
 	if(n < 0)
 	{
 		perror("***Error writing to socket\n");
-		exit(1);
+		close(sockfd_client);
+		return NULL;
 	}
 
 	/* Read server response */
@@ -164,9 +168,11 @@ void* do_proxy(void* thr_param)
 		}
 		int i = write(sockfd_client, buffer, nread);
 	}
+
 	close(sockfd_server);
 	close(sockfd_client);
 	printf("\n>>>\n");
+	return NULL;
 }
 
 void main_loop(int sockfd_proxy)
