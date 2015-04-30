@@ -1,1 +1,4 @@
 proxy
+proxy_chunked
+proxy_chunked.dSYM
+proxy.dSYM/

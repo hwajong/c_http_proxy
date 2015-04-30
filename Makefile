@@ -1,4 +1,5 @@
 all:
 	rm -rf ./proxy
 	gcc proxy.c -o proxy -lpthread -g
-	./proxy 47590
+	gcc proxy_chunked.c -o proxy_chunked -lpthread -g
+	./proxy_chunked 47590
