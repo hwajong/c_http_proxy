@@ -8,7 +8,6 @@
 #include <pthread.h>
 #include <string.h>
 #include <signal.h>
-#include <arpa/inet.h>
 
 #define BUFSIZE 1024*8
 
@@ -82,6 +81,7 @@ void* do_proxy(void* thr_param)
 	free(thr_param);
 
 	// obtain header
+	char buf[BUFSIZE];
 	char req[BUFSIZE];
 	char req_cp[BUFSIZE];
 
@@ -105,18 +105,19 @@ void* do_proxy(void* thr_param)
 	printf("***Port : %d\n", port);
 	printf("***DNS retrieve...");
 
+
 	struct addrinfo *result;
 	int error = getaddrinfo(host_name, NULL, NULL, &result);
 	if(error != 0)
-	{   
+	{
 		fflush(stdout);
 		fprintf(stderr, "\n***No such host : %s\n", host_name);
 		close(sockfd_client);
 		return NULL;
-	}   
+	}
 
 	printf("ok\n");
-
+	
 	struct sockaddr_in *serv_addr = (struct sockaddr_in  *)result->ai_addr;
 	serv_addr->sin_port = htons(port);
 
@@ -125,16 +126,16 @@ void* do_proxy(void* thr_param)
 	inet_ntop(AF_INET, &serv_addr->sin_addr, server_ip, 100); 
 	printf("***Connecting to server : %s...", server_ip);
 	fflush(stdout);
-	int sockfd_server = socket(AF_INET, SOCK_STREAM, 0); 
+	int sockfd_server = socket(AF_INET, SOCK_STREAM, 0);
 	if(connect(sockfd_server, (struct sockaddr *)serv_addr, sizeof(struct sockaddr_in))<0)
-	{   
+	{
 		perror("***Error in connecting to server\n");
 		close(sockfd_server);
 		close(sockfd_client);
 		freeaddrinfo(result);
 		return NULL;
-	}   
-
+	}
+	
 	freeaddrinfo(result);
 	printf("ok\n");
 
@@ -149,100 +150,30 @@ void* do_proxy(void* thr_param)
 	}
 
 	/* Read server response */
-	char buffer[1024 * 32] = {0,};
-	int content_len = 0;
-	int count_recv = 0;
-
-	int header_data_size = 1024*1024;
-	char* header_data = malloc(header_data_size);
-	memset(header_data, 0, header_data_size);
-	int nheader_data = 0;
-
-	int body_data_size = 1024*1024*10;
-	char* body_data = malloc(body_data_size);
-	memset(body_data, 0, body_data_size); 
-	int nbody_data = 0;
-
-	int exist_contents_len = 0;
-
-	do
-	{
-		// recieve from remote host
-		memset((char*)buffer, 0, sizeof(buffer));
-		n = recv(sockfd_server, buffer, sizeof(buffer), 0);
-
-		if(n > 0)
-		{
-			char* body = buffer;
-
-			// if this is the first time we are here
-			// meaning: we are reading the http response header
-			if(count_recv++ == 0)
-			{
-				// read Content-Length
-				const char* p = strstr(buffer, "Content-Length:");
-				if(p!= NULL)
-				{
-					sscanf(p, "Content-Length: %d", &content_len);
-					printf("***Content-Length: %d\n", content_len);
-					exist_contents_len = 1;
-				}
-
-				body = strstr(buffer, "\r\n\r\n") + 4;
-				
-				nheader_data = body-buffer;
-				memcpy(header_data, buffer, nheader_data);
-
-//				printf("%s\n\n\n\n", header_data);
-			}
-
-			//printf("%s", buffer);
-			//printf("%s", body);
-			if(content_len == 0)
-			{
-				memcpy(body_data + nbody_data, body, strlen(body));
-				nbody_data += strlen(body);
-			}
-			else // Content-Length 가 헤더에 있을 경우
-			{
-				int header_size = body - buffer;
-				int nbody = n - header_size;
-
-				int nwrite = nbody;
-				memcpy(body_data + nbody_data, body, nbody);
-				nbody_data += nbody;
-				content_len -= nwrite;
-
-				if(content_len <= 0) break;
-			}
-		}
-	} while(n > 0);
-
-	if(!exist_contents_len) 
-	{ 
-		// insert Content-Lengt field 
-		char* p = strstr(header_data, "\r\n\r\n");
-		sprintf(p, "\nContent-Length: %d\r\n\r\n", nbody_data);
-		nheader_data = strlen(header_data);
-		printf("***Insert Content-Length Field...ok\n");
-	}
-
+	int flag = 1;
+	printf("***reading server response\n");
 	printf(">>>\n");
-	printf("%s", header_data);
-//	printf("---------------------------\n\n");
-//	printf("%s", body_data);
-
-//	printf("***** nheader_data : %d\n", nheader_data);
-//	printf("***** nbody_data : %d\n", nbody_data);
-	write(sockfd_client, header_data, nheader_data);
-	write(sockfd_client, body_data, nbody_data);
-
-	free(header_data);
-	free(body_data);
+	while(1)
+	{
+		char buffer[BUFSIZE] = {0,};
+		int nread = read(sockfd_server, buffer, BUFSIZE);
+		if(nread <= 0) break;
+		
+		if(flag)
+		{
+			printf("%s", buffer);
+			flag = 1;
+		}
+		else 
+		{
+			printf(".");
+		}
+		int i = write(sockfd_client, buffer, nread);
+	}
 
 	close(sockfd_server);
 	close(sockfd_client);
-	printf(">>>\n\n");
+	printf("\n>>>\n");
 	return NULL;
 }
 
@@ -263,7 +194,7 @@ void main_loop(int sockfd_proxy)
 		pthread_t p_thread;
 		int* thr_param = malloc(sizeof(int));
 		*thr_param = sockfd_client;
-		pthread_create(&p_thread, NULL, do_proxy, (void *)thr_param);
+		int thr_id = pthread_create(&p_thread, NULL, do_proxy, (void *)thr_param);
 
 		pthread_detach(p_thread);
 	}

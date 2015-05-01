@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <signal.h>
+#include <arpa/inet.h>
 
 #define BUFSIZE 1024*8
 
@@ -81,7 +82,6 @@ void* do_proxy(void* thr_param)
 	free(thr_param);
 
 	// obtain header
-	char buf[BUFSIZE];
 	char req[BUFSIZE];
 	char req_cp[BUFSIZE];
 
@@ -105,37 +105,37 @@ void* do_proxy(void* thr_param)
 	printf("***Port : %d\n", port);
 	printf("***DNS retrieve...");
 
-	struct hostent *server;
-	server = gethostbyname(host_name);
-	if (server == NULL)
-	{
+	struct addrinfo *result;
+	int error = getaddrinfo(host_name, NULL, NULL, &result);
+	if(error != 0)
+	{   
 		fflush(stdout);
 		fprintf(stderr, "\n***No such host : %s\n", host_name);
 		close(sockfd_client);
 		return NULL;
-	}
+	}   
+
 	printf("ok\n");
 
-	struct sockaddr_in serv_addr;
-	bzero((char *) &serv_addr, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	struct in_addr *pptr = (struct in_addr  *)server->h_addr;
-	bcopy((char *)pptr, (char *)&serv_addr.sin_addr, server->h_length);
-	serv_addr.sin_port = htons(port);
+	struct sockaddr_in *serv_addr = (struct sockaddr_in  *)result->ai_addr;
+	serv_addr->sin_port = htons(port);
 
 	// Connect to server
 	char server_ip[100] = {0,};
-	inet_ntop(AF_INET, &serv_addr.sin_addr, server_ip, 100); 
+	inet_ntop(AF_INET, &serv_addr->sin_addr, server_ip, 100); 
 	printf("***Connecting to server : %s...", server_ip);
 	fflush(stdout);
-	int sockfd_server = socket(AF_INET, SOCK_STREAM, 0);
-	if(connect(sockfd_server, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0)
-	{
+	int sockfd_server = socket(AF_INET, SOCK_STREAM, 0); 
+	if(connect(sockfd_server, (struct sockaddr *)serv_addr, sizeof(struct sockaddr_in))<0)
+	{   
 		perror("***Error in connecting to server\n");
+		close(sockfd_server);
 		close(sockfd_client);
+		freeaddrinfo(result);
 		return NULL;
-	}
-	
+	}   
+
+	freeaddrinfo(result);
 	printf("ok\n");
 
 	/* Send message to server */
@@ -143,6 +143,7 @@ void* do_proxy(void* thr_param)
 	if(n < 0)
 	{
 		perror("***Error writing to socket\n");
+		close(sockfd_server);
 		close(sockfd_client);
 		return NULL;
 	}
@@ -427,7 +428,7 @@ void main_loop(int sockfd_proxy)
 		pthread_t p_thread;
 		int* thr_param = malloc(sizeof(int));
 		*thr_param = sockfd_client;
-		int thr_id = pthread_create(&p_thread, NULL, do_proxy, (void *)thr_param);
+		pthread_create(&p_thread, NULL, do_proxy, (void *)thr_param);
 
 		pthread_detach(p_thread);
 	}
